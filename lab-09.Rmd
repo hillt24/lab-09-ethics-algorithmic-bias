@@ -1,7 +1,7 @@
 ---
 title: "Lab 09: Algorithmic Bias"
-author: "Insert your name here"
-date: "Insert date here"
+author: "Tiffani J. Hill"
+date: "03.04.2026"
 output: github_document
 ---
 
@@ -12,6 +12,7 @@ First, let's load the necessary packages:
 ```{r load-packages, message = FALSE}
 library(tidyverse)
 library(fairness)
+library(janitor)
 ```
 
 ### The data
@@ -19,10 +20,70 @@ library(fairness)
 For this lab, we'll use the COMPAS dataset compiled by ProPublica. The data has been preprocessed and cleaned for you. You'll have to load it yourself. The dataset is available in the `data` folder, but I've changed the file name from `compas-scores-two-years.csv` to `compas-scores-2-years.csv`. I've done this help you practice debugging code when you encounter an error.
 
 ```{r}
-compas <- read_csv("data/compas-scores-two-years.csv")
+compas <- read_csv("data/compas-scores-2-years.csv") %>% 
+  clean_names() %>% 
+  rename(
+    decile_score = decile_score_12,
+    priors_count = priors_count_15
+  )
+glimpse(compas)
+```
+###Exercise 1
+There are 7214 rows, which represent individual observations. There are 53 columns. 
+```{r}
+nrow(compas)
+ncol(compas)
+colnames(compas)
+
 ```
 
+## Exercise 2
+The number of defendants is equivalent to the number of rows. Each entry has a unique id number.
 
-## Additional Exercises  
+###Exercise 3
+```{r risk-score}
 
-Almost there! Keep building on your work and follow the same structure for any remaining exercises. Each exercise builds on the last, so take your time and make sure your code is working as expected.  
+compas %>% 
+  ggplot(aes(x = decile_score)) +
+  geom_histogram()
+
+
+```
+###Exercise 4
+```{r visual-by-demographics}
+compas %>% 
+  ggplot(aes(x = decile_score)) +
+  geom_histogram() +
+  facet_wrap(~sex)
+  
+
+compas %>% 
+  ggplot(aes(x = decile_score)) +
+  geom_histogram() +
+  facet_wrap(~race)
+
+compas %>% 
+  ggplot(aes(x = decile_score)) +
+  geom_histogram() +
+  facet_wrap(~age_cat)
+```
+```{r challenge-visual}
+compas %>% 
+  ggplot(aes(x = decile_score, color = race))+
+  geom_bar() +
+  facet_wrap(~age_cat)
+```
+```{r recidivisism}
+compas %>% 
+  ggplot(aes(x = two_year_recid, y = decile_score)) +
+geom_count()
+```
+Not exactly. 
+
+```{r compas-accuracy}
+
+compas_accuracy <- lm(compas$two_year_recid ~ compas$decile_score)
+summary(compas_accuracy)
+
+cor(compas$decile_score, compas$two_year_recid)
+```
