@@ -11,6 +11,7 @@ First, let’s load the necessary packages:
 library(tidyverse)
 library(fairness)
 library(janitor)
+library(dplyr)
 ```
 
 ### The data
@@ -218,34 +219,178 @@ compas %>%
 geom_count()
 ```
 
-![](lab-09_files/figure-gfm/recidivisism-1.png)<!-- --> Not exactly.
+![](lab-09_files/figure-gfm/recidivisism-1.png)<!-- --> Not exactly. The
+COMPAS algorithim is correct 55% of the time.
 
 ``` r
-compas_accuracy <- lm(compas$two_year_recid ~ compas$decile_score)
-summary(compas_accuracy)
+compas <- compas %>% 
+  mutate(
+    compas_classification = case_when(decile_score >= 7 & two_year_recid == 1 ~ "TP",
+   decile_score <= 4 & two_year_recid == 0 ~"TN",
+   decile_score >= 7 & two_year_recid == 0 ~ "FP",
+   decile_score <= 4 & two_year_recid == 1 ~ "FN")  )
+
+compas_summary <- compas %>%
+  filter(!is.na(compas_classification)) %>%
+  count(compas_classification)
+
+compas %>%
+  count(compas_classification) %>%
+  mutate(percent = n / sum(n) * 100)
 ```
 
-    ## 
-    ## Call:
-    ## lm(formula = compas$two_year_recid ~ compas$decile_score)
-    ## 
-    ## Residuals:
-    ##     Min      1Q  Median      3Q     Max 
-    ## -0.7861 -0.3584 -0.2362  0.4583  0.7638 
-    ## 
-    ## Coefficients:
-    ##                     Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)         0.175146   0.010254   17.08   <2e-16 ***
-    ## compas$decile_score 0.061094   0.001921   31.80   <2e-16 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## Residual standard error: 0.466 on 7212 degrees of freedom
-    ## Multiple R-squared:  0.123,  Adjusted R-squared:  0.1229 
-    ## F-statistic:  1011 on 1 and 7212 DF,  p-value: < 2.2e-16
+    ## # A tibble: 5 × 3
+    ##   compas_classification     n percent
+    ##   <chr>                 <int>   <dbl>
+    ## 1 FN                     1216   16.9 
+    ## 2 FP                      644    8.93
+    ## 3 TN                     2681   37.2 
+    ## 4 TP                     1351   18.7 
+    ## 5 <NA>                   1322   18.3
 
 ``` r
-cor(compas$decile_score, compas$two_year_recid)
+ggplot(compas_summary, aes(x = compas_classification, y = n)) +
+  geom_col() +
+  labs(
+    title = "COMPAS Prediction Outcomes",
+    x = "Classification",
+    y = "Number of Cases"
+  ) +
+  theme_minimal()
 ```
 
-    ## [1] 0.3507026
+![](lab-09_files/figure-gfm/compas-accuracy-1.png)<!-- --> \##Part 3
+More white defendants are deemed low-risk than Black defendants. For
+white people, there seems to be a positive skew.
+
+``` r
+filterbw <-
+compas %>% 
+  filter(race == "African-American"| race =="Caucasian") 
+
+filterbw %>% 
+  ggplot(aes(x = decile_score)) +
+  geom_histogram() +
+  facet_grid(~ race)
+```
+
+    ## `stat_bin()` using `bins = 30`. Pick better value `binwidth`.
+
+![](lab-09_files/figure-gfm/investigating-disparities-1.png)<!-- -->
+
+There’s clearly a disparity between Black defendants and white
+defendants. About 39% of Black defendants are considered high risk,
+while 17% of white defendants are considered high risk.
+
+``` r
+filterbw <- filterbw %>% 
+  mutate(high_risk = decile_score >= 7)
+
+filterbw %>% 
+  group_by(race) %>% 
+  summarise(
+    total_defendants = n(),
+    high_risk_count = sum(high_risk),
+    percent_high_risk = mean(high_risk) * 100)
+```
+
+    ## # A tibble: 2 × 4
+    ##   race             total_defendants high_risk_count percent_high_risk
+    ##   <chr>                       <int>           <int>             <dbl>
+    ## 1 African-American             3696            1425              38.6
+    ## 2 Caucasian                    2454             419              17.1
+
+``` r
+filterbw <- filterbw %>% 
+  mutate(accuracy = compas_classification == "TP" | compas_classification == "TN")
+
+filterbw %>% 
+  group_by(race) %>% 
+  summarise(
+    total_defendants = n(),
+    accurate_predictions = sum(accuracy, na.rm = TRUE),
+    percent_accurate = mean(accuracy, na.rm = TRUE) * 100)
+```
+
+    ## # A tibble: 2 × 4
+    ##   race             total_defendants accurate_predictions percent_accurate
+    ##   <chr>                       <int>                <int>            <dbl>
+    ## 1 African-American             3696                 1968             66.8
+    ## 2 Caucasian                    2454                 1422             70.4
+
+)
+
+``` r
+non_recidivists <- compas %>%
+  filter(two_year_recid == 0)
+
+non_recidivists %>%
+  filter(race %in% c("African-American", "Caucasian")) %>%
+  group_by(race) %>%
+  summarise(
+    total_nonrecid = n(),
+    false_positives = sum(decile_score >= 7, na.rm = TRUE),
+    false_positive_rate = mean(decile_score >= 7, na.rm = TRUE) * 100
+  )
+```
+
+    ## # A tibble: 2 × 4
+    ##   race             total_nonrecid false_positives false_positive_rate
+    ##   <chr>                     <int>           <int>               <dbl>
+    ## 1 African-American           1795             447               24.9 
+    ## 2 Caucasian                  1488             136                9.14
+
+``` r
+recidivists <- compas %>%
+  filter(two_year_recid == 1)
+
+recidivists %>%
+  filter(race %in% c("African-American", "Caucasian")) %>%
+  group_by(race) %>%
+  summarise(
+    total_recid = n(),
+    false_negatives = sum(decile_score <= 4, na.rm = TRUE),
+    false_negative_rate = mean(decile_score <= 4, na.rm = TRUE) * 100
+  )
+```
+
+    ## # A tibble: 2 × 4
+    ##   race             total_recid false_negatives false_negative_rate
+    ##   <chr>                  <int>           <int>               <dbl>
+    ## 1 African-American        1901             532                28.0
+    ## 2 Caucasian                966             461                47.7
+
+There is a much larger false negative rate for Caucasian defendants than
+Black defendants. Conversely, there is a much larger false positive rate
+for Black defendants than white defendants.
+
+``` r
+fpr <- compas %>%
+  filter(two_year_recid == 0,
+         race %in% c("African-American", "Caucasian")) %>%
+  group_by(race) %>%
+  summarise(rate = mean(decile_score >= 7, na.rm = TRUE) * 100) %>%
+  mutate(metric = "False Positive Rate")
+
+fnr <- compas %>%
+  filter(two_year_recid == 1,
+         race %in% c("African-American", "Caucasian")) %>%
+  group_by(race) %>%
+  summarise(rate = mean(decile_score <= 4, na.rm = TRUE) * 100) %>%
+  mutate(metric = "False Negative Rate")
+
+rates <- bind_rows(fpr, fnr)
+
+ggplot(rates, aes(x = race, y = rate, fill = metric)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "COMPAS Prediction Errors by Race",
+    x = "Race",
+    y = "Percentage",
+    fill = "Metric"
+  ) +
+  theme_minimal()
+```
+
+![](lab-09_files/figure-gfm/disparity-visualization-1.png)<!-- -->
+\`\`\`

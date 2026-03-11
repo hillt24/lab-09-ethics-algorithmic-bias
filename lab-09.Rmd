@@ -13,6 +13,7 @@ First, let's load the necessary packages:
 library(tidyverse)
 library(fairness)
 library(janitor)
+library(dplyr)
 ```
 
 ### The data
@@ -79,11 +80,129 @@ compas %>%
 geom_count()
 ```
 Not exactly. 
-
+The COMPAS algorithim is correct 55% of the time.
 ```{r compas-accuracy}
+compas <- compas %>% 
+  mutate(
+    compas_classification = case_when(decile_score >= 7 & two_year_recid == 1 ~ "TP",
+   decile_score <= 4 & two_year_recid == 0 ~"TN",
+   decile_score >= 7 & two_year_recid == 0 ~ "FP",
+   decile_score <= 4 & two_year_recid == 1 ~ "FN")  )
 
-compas_accuracy <- lm(compas$two_year_recid ~ compas$decile_score)
-summary(compas_accuracy)
+compas_summary <- compas %>%
+  filter(!is.na(compas_classification)) %>%
+  count(compas_classification)
 
-cor(compas$decile_score, compas$two_year_recid)
+compas %>%
+  count(compas_classification) %>%
+  mutate(percent = n / sum(n) * 100)
+
+ggplot(compas_summary, aes(x = compas_classification, y = n)) +
+  geom_col() +
+  labs(
+    title = "COMPAS Prediction Outcomes",
+    x = "Classification",
+    y = "Number of Cases"
+  ) +
+  theme_minimal()
+```
+##Part 3
+More white defendants are deemed low-risk than Black defendants. For white people, there seems to be a positive skew. 
+```{r investigating-disparities}
+filterbw <-
+compas %>% 
+  filter(race == "African-American"| race =="Caucasian") 
+
+filterbw %>% 
+  ggplot(aes(x = decile_score)) +
+  geom_histogram() +
+  facet_grid(~ race)
+```
+
+There's clearly a disparity between Black defendants and white defendants. About 39% of Black defendants are considered high risk, while 17% of white defendants are considered high risk.
+
+```{r disparities-percent}
+filterbw <- filterbw %>% 
+  mutate(high_risk = decile_score >= 7)
+
+filterbw %>% 
+  group_by(race) %>% 
+  summarise(
+    total_defendants = n(),
+    high_risk_count = sum(high_risk),
+    percent_high_risk = mean(high_risk) * 100)
+  
+
+
+```
+
+
+```{r disparities-accuracy}
+filterbw <- filterbw %>% 
+  mutate(accuracy = compas_classification == "TP" | compas_classification == "TN")
+
+filterbw %>% 
+  group_by(race) %>% 
+  summarise(
+    total_defendants = n(),
+    accurate_predictions = sum(accuracy, na.rm = TRUE),
+    percent_accurate = mean(accuracy, na.rm = TRUE) * 100)
+```
+  )
+
+
+```{r accuracy-by-group}
+non_recidivists <- compas %>%
+  filter(two_year_recid == 0)
+
+non_recidivists %>%
+  filter(race %in% c("African-American", "Caucasian")) %>%
+  group_by(race) %>%
+  summarise(
+    total_nonrecid = n(),
+    false_positives = sum(decile_score >= 7, na.rm = TRUE),
+    false_positive_rate = mean(decile_score >= 7, na.rm = TRUE) * 100
+  )
+
+recidivists <- compas %>%
+  filter(two_year_recid == 1)
+
+recidivists %>%
+  filter(race %in% c("African-American", "Caucasian")) %>%
+  group_by(race) %>%
+  summarise(
+    total_recid = n(),
+    false_negatives = sum(decile_score <= 4, na.rm = TRUE),
+    false_negative_rate = mean(decile_score <= 4, na.rm = TRUE) * 100
+  )
+```
+There is a much larger false negative rate for Caucasian defendants than Black defendants. Conversely, there is a much larger false positive rate for Black defendants than white defendants.
+```{r disparity-visualization}
+
+fpr <- compas %>%
+  filter(two_year_recid == 0,
+         race %in% c("African-American", "Caucasian")) %>%
+  group_by(race) %>%
+  summarise(rate = mean(decile_score >= 7, na.rm = TRUE) * 100) %>%
+  mutate(metric = "False Positive Rate")
+
+fnr <- compas %>%
+  filter(two_year_recid == 1,
+         race %in% c("African-American", "Caucasian")) %>%
+  group_by(race) %>%
+  summarise(rate = mean(decile_score <= 4, na.rm = TRUE) * 100) %>%
+  mutate(metric = "False Negative Rate")
+
+rates <- bind_rows(fpr, fnr)
+
+ggplot(rates, aes(x = race, y = rate, fill = metric)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "COMPAS Prediction Errors by Race",
+    x = "Race",
+    y = "Percentage",
+    fill = "Metric"
+  ) +
+  theme_minimal()
+```
 ```
