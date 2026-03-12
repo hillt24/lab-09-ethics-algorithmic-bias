@@ -393,4 +393,95 @@ ggplot(rates, aes(x = race, y = rate, fill = metric)) +
 ```
 
 ![](lab-09_files/figure-gfm/disparity-visualization-1.png)<!-- -->
-\`\`\`
+Unfortunately, this is not the best graph, but after looking at it for a
+second, one can see that prior convictions seem to have a stronger
+correlation with decile score for Black defendants than any other racial
+group. For Black and White defendants, this is where prior convictions
+even seem to matter at all, but for White defendants it is more likely
+to get a lower decile score than Black defendants.
+
+``` r
+compas %>% 
+  ggplot(aes(x = priors_count, y = decile_score,
+             color = race)) +
+  geom_count(alpha = 1) +
+  facet_wrap(~ race)
+```
+
+![](lab-09_files/figure-gfm/bias-visual-1.png)<!-- --> \#calculate
+recidivism rates by score for each race
+
+``` r
+compas %>% 
+  group_by(race) %>% 
+  summarise(
+    total_people = n(),
+    total_recid = sum(two_year_recid, na.rm = TRUE),
+    percent_recid = mean(two_year_recid, na.rm = TRUE) * 100
+  )
+```
+
+    ## # A tibble: 6 × 4
+    ##   race             total_people total_recid percent_recid
+    ##   <chr>                   <int>       <dbl>         <dbl>
+    ## 1 African-American         3696        1901          51.4
+    ## 2 Asian                      32           9          28.1
+    ## 3 Caucasian                2454         966          39.4
+    ## 4 Hispanic                  637         232          36.4
+    ## 5 Native American            18          10          55.6
+    ## 6 Other                     377         133          35.3
+
+If the algorithm was fair, the lines would mostly overlap. However, this
+is not the case. For Caucasion and African American defendants, the
+lines mostly overlap but for all other races they seem to vary quite
+drastically. Thus, the algorithm doesn’t treat all races the same.
+
+``` r
+library(dplyr)
+
+calibration <- compas %>%
+  group_by(race, decile_score) %>%
+  summarise(
+    n = n(),
+    recid_rate = mean(two_year_recid, na.rm = TRUE)
+  ) %>%
+  ungroup()
+```
+
+    ## `summarise()` has grouped output by 'race'. You can override using the
+    ## `.groups` argument.
+
+``` r
+library(ggplot2)
+
+ggplot(calibration, aes(x = decile_score, y = recid_rate, color = race)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    x = "COMPAS Risk Score (Decile)",
+    y = "Observed Recidivism Rate",
+    title = "Calibration of COMPAS Risk Scores by Race"
+  ) +
+  theme_minimal()
+```
+
+![](lab-09_files/figure-gfm/plot-recid-1.png)<!-- --> To create a fairer
+risk assessment algorithm, I would remove/modify variables that
+indirectly encode for race that would create bias. Additionally, it
+would be essential to conduct regular bias audits, something that
+researchers like us could do, to identify and address these disparities
+if they do arise.
+
+Fairness goals can conflict with each other when attempting to create a
+well calibrated system but also creating equal error rates across racial
+groups. A well calibrated algorithm would mean the same risk score has
+similar probabilities of recidivism across demographic groups. However,
+this could create unequal error rates in some racial groups. To equalize
+this, this could create an algorithm that is no longer perfectly
+calibrated. Additionally, increasing predictive accuracy may reduce
+fairness.
+
+It is imperative for algorithmic risk assessments to only be used as one
+factor among many when making judicial decisions. Judges and legal
+professionals should also receive training on how to interpret
+algorithmic predictions and understand their limitations.
