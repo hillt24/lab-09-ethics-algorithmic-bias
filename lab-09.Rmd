@@ -41,16 +41,16 @@ colnames(compas)
 ## Exercise 2
 The number of defendants is equivalent to the number of rows. Each entry has a unique id number.
 
-###Exercise 3
+### Exercise 3
 ```{r risk-score}
 
 compas %>% 
   ggplot(aes(x = decile_score)) +
   geom_histogram()
 
-
 ```
-###Exercise 4
+
+### Exercise 4
 ```{r visual-by-demographics}
 compas %>% 
   ggplot(aes(x = decile_score)) +
@@ -68,12 +68,14 @@ compas %>%
   geom_histogram() +
   facet_wrap(~age_cat)
 ```
+
 ```{r challenge-visual}
 compas %>% 
   ggplot(aes(x = decile_score, color = race))+
   geom_bar() +
   facet_wrap(~age_cat)
 ```
+
 ```{r recidivisism}
 compas %>% 
   ggplot(aes(x = two_year_recid, y = decile_score)) +
@@ -81,6 +83,7 @@ geom_count()
 ```
 Not exactly. 
 The COMPAS algorithim is correct 55% of the time.
+
 ```{r compas-accuracy}
 compas <- compas %>% 
   mutate(
@@ -106,8 +109,11 @@ ggplot(compas_summary, aes(x = compas_classification, y = n)) +
   ) +
   theme_minimal()
 ```
-##Part 3
+
+## Part 3
+
 More white defendants are deemed low-risk than Black defendants. For white people, there seems to be a positive skew. 
+
 ```{r investigating-disparities}
 filterbw <-
 compas %>% 
@@ -131,9 +137,6 @@ filterbw %>%
     total_defendants = n(),
     high_risk_count = sum(high_risk),
     percent_high_risk = mean(high_risk) * 100)
-  
-
-
 ```
 
 
@@ -148,7 +151,7 @@ filterbw %>%
     accurate_predictions = sum(accuracy, na.rm = TRUE),
     percent_accurate = mean(accuracy, na.rm = TRUE) * 100)
 ```
-  )
+
 
 
 ```{r accuracy-by-group}
@@ -176,7 +179,9 @@ recidivists %>%
     false_negative_rate = mean(decile_score <= 4, na.rm = TRUE) * 100
   )
 ```
+
 There is a much larger false negative rate for Caucasian defendants than Black defendants. Conversely, there is a much larger false positive rate for Black defendants than white defendants.
+
 ```{r disparity-visualization}
 
 fpr <- compas %>%
@@ -206,6 +211,7 @@ ggplot(rates, aes(x = race, y = rate, fill = metric)) +
   theme_minimal()
 ```
 Unfortunately, this is not the best graph, but after looking at it for a second, one can see that prior convictions seem to have a stronger correlation with decile score for Black defendants than any other racial group. For Black and White defendants, this is where prior convictions even seem to matter at all, but for White defendants it is more likely to get a lower decile score than Black defendants.
+
 ```{r bias-visual}
 compas %>% 
   ggplot(aes(x = priors_count, y = decile_score,
@@ -213,7 +219,8 @@ compas %>%
   geom_count(alpha = 1) +
   facet_wrap(~ race)
 ```
-#calculate recidivism rates by score for each race
+
+# calculate recidivism rates by score for each race
 
 ```{r recidivism-rates}
 compas %>% 
